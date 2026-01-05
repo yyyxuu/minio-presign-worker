@@ -17,13 +17,28 @@ export default {
       });
     }
 
+    // 添加随机后缀避免文件名冲突，不保留原文件名和路径
+    const dateNow = new Date();
+    // 转换为 GMT+8 时区
+    const offset = 8 * 60; // GMT+8 的分钟偏移量
+    const localTime = new Date(dateNow.getTime() + (dateNow.getTimezoneOffset() + offset) * 60000);
+    const timestamp = localTime.toISOString().replace('T', ' ').substring(0, 19);
+    const uuid = crypto.randomUUID();
+
+    // 提取文件扩展名
+    const lastDotIndex = filename.lastIndexOf('.');
+    const extension = lastDotIndex > 0 ? filename.substring(lastDotIndex) : '';
+
+    // 使用时间戳+UUID作为文件名
+    const modifiedFilename = `${timestamp}_${uuid}${extension}`;
+
     // 1. 构建公开访问 URL
     const useSSL = env.MINIO_USE_SSL === "true";
     const protocol = useSSL ? "https" : "http";
     const port = env.MINIO_PORT && !["80", "443"].includes(env.MINIO_PORT)
       ? `:${env.MINIO_PORT}`
       : "";
-    const publicUrl = `${protocol}://${env.MINIO_ENDPOINT}${port}/${env.MINIO_BUCKET}/${encodeURIComponent(filename)}`;
+    const publicUrl = `${protocol}://${env.MINIO_ENDPOINT}${port}/${env.MINIO_BUCKET}/${encodeURIComponent(modifiedFilename)}`;
 
     // 3. 生成预签名上传 URL
     const expirySeconds = 60 * 5; // 5分钟有效期
@@ -33,7 +48,7 @@ export default {
     try {
       const uploadUrl = await generatePresignedUrl(
         env,
-        filename,
+        modifiedFilename,
         expires
       );
 
