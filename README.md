@@ -21,12 +21,14 @@
 ## 安装
 
 1. 克隆仓库：
+
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/yyyxuu/minio-presign-worker.git
 cd minio-presign-worker
 ```
 
 2. 安装依赖：
+
 ```bash
 npm install
 ```
@@ -47,15 +49,15 @@ MINIO_REGION=us-east-1
 
 ### 环境变量
 
-| 变量 | 必需 | 默认值 | 说明 |
-|------|------|--------|------|
-| `MINIO_ENDPOINT` | 是 | - | MinIO 服务器地址 |
-| `MINIO_BUCKET` | 是 | - | 目标存储桶名称 |
-| `MINIO_ACCESS_KEY` | 是 | - | MinIO 访问密钥 |
-| `MINIO_SECRET_KEY` | 是 | - | MinIO 秘密密钥（应配置为加密密钥） |
-| `MINIO_PORT` | 否 | 9000 | 服务器端口（80 或 443 时从 URL 中省略） |
-| `MINIO_USE_SSL` | 否 | false | 启用 SSL (`true`/`false`) |
-| `MINIO_REGION` | 否 | us-east-1 | 用于签名的 AWS 区域 |
+| 变量               | 必需 | 默认值    | 说明                                    |
+| ------------------ | ---- | --------- | --------------------------------------- |
+| `MINIO_ENDPOINT`   | 是   | -         | MinIO 服务器地址                        |
+| `MINIO_BUCKET`     | 是   | -         | 目标存储桶名称                          |
+| `MINIO_ACCESS_KEY` | 是   | -         | MinIO 访问密钥                          |
+| `MINIO_SECRET_KEY` | 是   | -         | MinIO 秘密密钥（应配置为加密密钥）      |
+| `MINIO_PORT`       | 否   | 9000      | 服务器端口（80 或 443 时从 URL 中省略） |
+| `MINIO_USE_SSL`    | 否   | false     | 启用 SSL (`true`/`false`)               |
+| `MINIO_REGION`     | 否   | us-east-1 | 用于签名的 AWS 区域                     |
 
 ### 生产环境加密密钥
 
@@ -110,8 +112,8 @@ npm run deploy
 
 ```json
 {
-  "upload_url": "https://minio-server.com/bucket/timestamp-uuid.ext?X-Amz-Algorithm=...",
-  "public_url": "https://minio-server.com/bucket/timestamp-uuid.ext"
+	"upload_url": "https://minio-server.com/bucket/timestamp-uuid.ext?X-Amz-Algorithm=...",
+	"public_url": "https://minio-server.com/bucket/timestamp-uuid.ext"
 }
 ```
 
@@ -122,10 +124,11 @@ curl "https://your-worker.workers.dev/presignedUrl?filename=test.jpg"
 ```
 
 响应：
+
 ```json
 {
-  "upload_url": "https://minio.example.com:9000/my-bucket/2025-01-05 12:34:56_a1b2c3d4-e5f6-7890-abcd-ef1234567890.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=...&X-Amz-Date=20250105T043456Z&X-Amz-Expires=300&X-Amz-SignedHeaders=host&X-Amz-Signature=...",
-  "public_url": "https://minio.example.com:9000/my-bucket/2025-01-05 12:34:56_a1b2c3d4-e5f6-7890-abcd-ef1234567890.jpg"
+	"upload_url": "https://minio.example.com:9000/my-bucket/2025-01-05 12:34:56_a1b2c3d4-e5f6-7890-abcd-ef1234567890.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=...&X-Amz-Date=20250105T043456Z&X-Amz-Expires=300&X-Amz-SignedHeaders=host&X-Amz-Signature=...",
+	"public_url": "https://minio.example.com:9000/my-bucket/2025-01-05 12:34:56_a1b2c3d4-e5f6-7890-abcd-ef1234567890.jpg"
 }
 ```
 
@@ -154,6 +157,7 @@ Worker 通过以下方式自动防止文件名冲突：
 3. 组合为：`{timestamp}_{uuid}.{extension}`
 
 示例：
+
 - 输入：`photo.jpg`
 - 存储为：`2025-01-05 12:34:56_a1b2c3d4-e5f6-7890-abcd-ef1234567890.jpg`
 
@@ -165,16 +169,17 @@ Worker 实现了 AWS Signature Version 4 签名：
 2. **待签名字符串**：算法、时间戳、凭证范围和规范请求哈希
 3. **签名密钥派生**：HMAC 链（kDate → kRegion → kService → kSigning）
 4. **签名**：使用派生的签名密钥对待签名字符串进行 HMAC
-5. **最终 URL**：包含 X-Amz-* 查询参数（包括签名）的基础 URL
+5. **最终 URL**：包含 X-Amz-\* 查询参数（包括签名）的基础 URL
 
 ## 错误响应
 
 所有错误均返回包含 `error` 字段的 JSON：
 
 - **400 Bad Request**：缺少文件名参数
+
   ```json
   {
-    "error": "Missing filename parameter"
+  	"error": "Missing filename parameter"
   }
   ```
 
@@ -183,8 +188,8 @@ Worker 实现了 AWS Signature Version 4 签名：
 - **500 Internal Server Error**：生成预签名 URL 失败
   ```json
   {
-    "error": "Failed to generate presigned URL",
-    "details": "Error message"
+  	"error": "Failed to generate presigned URL",
+  	"details": "Error message"
   }
   ```
 
@@ -217,32 +222,30 @@ minio-presign-worker/
 
 ```javascript
 async function uploadFile(file) {
-  // 1. 获取预签名 URL
-  const response = await fetch(
-    `https://your-worker.workers.dev/presignedUrl?filename=${encodeURIComponent(file.name)}`
-  );
-  const { upload_url, public_url } = await response.json();
+	// 1. 获取预签名 URL
+	const response = await fetch(`https://your-worker.workers.dev/presignedUrl?filename=${encodeURIComponent(file.name)}`);
+	const { upload_url, public_url } = await response.json();
 
-  // 2. 直接上传文件到 MinIO
-  await fetch(upload_url, {
-    method: 'PUT',
-    body: file,
-    headers: {
-      'Content-Type': file.type
-    }
-  });
+	// 2. 直接上传文件到 MinIO
+	await fetch(upload_url, {
+		method: 'PUT',
+		body: file,
+		headers: {
+			'Content-Type': file.type,
+		},
+	});
 
-  // 3. 文件现在可通过 public_url 访问
-  console.log('文件已上传:', public_url);
-  return public_url;
+	// 3. 文件现在可通过 public_url 访问
+	console.log('文件已上传:', public_url);
+	return public_url;
 }
 
 // 使用方法
 const fileInput = document.querySelector('#file-input');
 fileInput.addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  const url = await uploadFile(file);
-  console.log('已上传到:', url);
+	const file = e.target.files[0];
+	const url = await uploadFile(file);
+	console.log('已上传到:', url);
 });
 ```
 

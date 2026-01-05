@@ -21,12 +21,14 @@ A Cloudflare Worker that generates presigned URLs for MinIO object storage using
 ## Installation
 
 1. Clone the repository:
+
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/yyyxuu/minio-presign-worker.git
 cd minio-presign-worker
 ```
 
 2. Install dependencies:
+
 ```bash
 npm install
 ```
@@ -47,15 +49,15 @@ MINIO_REGION=us-east-1
 
 ### Environment Variables
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `MINIO_ENDPOINT` | Yes | - | MinIO server address |
-| `MINIO_BUCKET` | Yes | - | Target bucket name |
-| `MINIO_ACCESS_KEY` | Yes | - | MinIO access key |
-| `MINIO_SECRET_KEY` | Yes | - | MinIO secret key (should be encrypted as secret) |
-| `MINIO_PORT` | No | 9000 | Server port (omitted from URL if 80 or 443) |
-| `MINIO_USE_SSL` | No | false | Enable SSL (`true`/`false`) |
-| `MINIO_REGION` | No | us-east-1 | AWS region for signing |
+| Variable           | Required | Default   | Description                                      |
+| ------------------ | -------- | --------- | ------------------------------------------------ |
+| `MINIO_ENDPOINT`   | Yes      | -         | MinIO server address                             |
+| `MINIO_BUCKET`     | Yes      | -         | Target bucket name                               |
+| `MINIO_ACCESS_KEY` | Yes      | -         | MinIO access key                                 |
+| `MINIO_SECRET_KEY` | Yes      | -         | MinIO secret key (should be encrypted as secret) |
+| `MINIO_PORT`       | No       | 9000      | Server port (omitted from URL if 80 or 443)      |
+| `MINIO_USE_SSL`    | No       | false     | Enable SSL (`true`/`false`)                      |
+| `MINIO_REGION`     | No       | us-east-1 | AWS region for signing                           |
 
 ### Production Deployment Secrets
 
@@ -110,8 +112,8 @@ npm run deploy
 
 ```json
 {
-  "upload_url": "https://minio-server.com/bucket/timestamp-uuid.ext?X-Amz-Algorithm=...",
-  "public_url": "https://minio-server.com/bucket/timestamp-uuid.ext"
+	"upload_url": "https://minio-server.com/bucket/timestamp-uuid.ext?X-Amz-Algorithm=...",
+	"public_url": "https://minio-server.com/bucket/timestamp-uuid.ext"
 }
 ```
 
@@ -122,10 +124,11 @@ curl "https://your-worker.workers.dev/presignedUrl?filename=test.jpg"
 ```
 
 Response:
+
 ```json
 {
-  "upload_url": "https://minio.example.com:9000/my-bucket/2025-01-05 12:34:56_a1b2c3d4-e5f6-7890-abcd-ef1234567890.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=...&X-Amz-Date=20250105T043456Z&X-Amz-Expires=300&X-Amz-SignedHeaders=host&X-Amz-Signature=...",
-  "public_url": "https://minio.example.com:9000/my-bucket/2025-01-05 12:34:56_a1b2c3d4-e5f6-7890-abcd-ef1234567890.jpg"
+	"upload_url": "https://minio.example.com:9000/my-bucket/2025-01-05 12:34:56_a1b2c3d4-e5f6-7890-abcd-ef1234567890.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=...&X-Amz-Date=20250105T043456Z&X-Amz-Expires=300&X-Amz-SignedHeaders=host&X-Amz-Signature=...",
+	"public_url": "https://minio.example.com:9000/my-bucket/2025-01-05 12:34:56_a1b2c3d4-e5f6-7890-abcd-ef1234567890.jpg"
 }
 ```
 
@@ -154,6 +157,7 @@ The worker automatically prevents filename conflicts by:
 3. Combining them: `{timestamp}_{uuid}.{extension}`
 
 Example:
+
 - Input: `photo.jpg`
 - Stored as: `2025-01-05 12:34:56_a1b2c3d4-e5f6-7890-abcd-ef1234567890.jpg`
 
@@ -165,16 +169,17 @@ The worker implements AWS Signature Version 4 signing:
 2. **String to Sign**: Algorithm, timestamp, credential scope, and hashed canonical request
 3. **Signing Key Derivation**: HMAC chain (kDate → kRegion → kService → kSigning)
 4. **Signature**: HMAC of string-to-sign with derived signing key
-5. **Final URL**: Base URL with X-Amz-* query parameters including signature
+5. **Final URL**: Base URL with X-Amz-\* query parameters including signature
 
 ## Error Responses
 
 All errors return JSON with an `error` field:
 
 - **400 Bad Request**: Missing filename parameter
+
   ```json
   {
-    "error": "Missing filename parameter"
+  	"error": "Missing filename parameter"
   }
   ```
 
@@ -183,8 +188,8 @@ All errors return JSON with an `error` field:
 - **500 Internal Server Error**: Failed to generate presigned URL
   ```json
   {
-    "error": "Failed to generate presigned URL",
-    "details": "Error message"
+  	"error": "Failed to generate presigned URL",
+  	"details": "Error message"
   }
   ```
 
@@ -217,32 +222,30 @@ minio-presign-worker/
 
 ```javascript
 async function uploadFile(file) {
-  // 1. Get presigned URL
-  const response = await fetch(
-    `https://your-worker.workers.dev/presignedUrl?filename=${encodeURIComponent(file.name)}`
-  );
-  const { upload_url, public_url } = await response.json();
+	// 1. Get presigned URL
+	const response = await fetch(`https://your-worker.workers.dev/presignedUrl?filename=${encodeURIComponent(file.name)}`);
+	const { upload_url, public_url } = await response.json();
 
-  // 2. Upload file directly to MinIO
-  await fetch(upload_url, {
-    method: 'PUT',
-    body: file,
-    headers: {
-      'Content-Type': file.type
-    }
-  });
+	// 2. Upload file directly to MinIO
+	await fetch(upload_url, {
+		method: 'PUT',
+		body: file,
+		headers: {
+			'Content-Type': file.type,
+		},
+	});
 
-  // 3. File is now accessible at public_url
-  console.log('File uploaded:', public_url);
-  return public_url;
+	// 3. File is now accessible at public_url
+	console.log('File uploaded:', public_url);
+	return public_url;
 }
 
 // Usage
 const fileInput = document.querySelector('#file-input');
 fileInput.addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  const url = await uploadFile(file);
-  console.log('Uploaded to:', url);
+	const file = e.target.files[0];
+	const url = await uploadFile(file);
+	console.log('Uploaded to:', url);
 });
 ```
 
