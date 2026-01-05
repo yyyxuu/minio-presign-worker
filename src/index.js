@@ -67,8 +67,7 @@ async function generatePresignedUrl(env, filename, expires) {
 
   // 1. 规范化文件名（处理路径分隔符）
   const encodedFilename = encodeURIComponent(filename)
-    .replace(/%2F/g, '/')
-    .replace(/\+/g, '%20');
+    .replace(/%2F/g, '/');
 
   // 2. 生成时间戳
   function formatISO8601(date) {
@@ -87,7 +86,32 @@ async function generatePresignedUrl(env, filename, expires) {
 
   // 3. 构建规范请求
   const canonicalUri = `/${env.MINIO_BUCKET}/${encodedFilename}`;
-  const canonicalQueryString = "";
+
+  const region = env.MINIO_REGION || "us-east-1";
+  const credentialScope = `${dateStamp}/${region}/s3/aws4_request`;
+
+  // 计算过期时间（秒）
+  const now = Math.floor(Date.now() / 1000);
+  const expiresInSeconds = String(expires - now);
+
+  // 构建查询参数（用于签名和最终 URL）
+  const queryParams = {
+    "X-Amz-Algorithm": "AWS4-HMAC-SHA256",
+    "X-Amz-Credential": `${env.MINIO_ACCESS_KEY}/${credentialScope}`,
+    "X-Amz-Date": timestamp,
+    "X-Amz-Expires": expiresInSeconds,
+    "X-Amz-SignedHeaders": "host"
+  };
+
+  // 构建规范查询字符串（按 key 排序，URL 编码）
+  const canonicalQueryString = Object.keys(queryParams)
+    .sort()
+    .map(key => {
+      const encodedKey = encodeURIComponent(key);
+      const encodedValue = encodeURIComponent(queryParams[key]);
+      return `${encodedKey}=${encodedValue}`;
+    })
+    .join('&');
 
   const headers = {
     "host": `${env.MINIO_ENDPOINT}${port}`
@@ -115,9 +139,6 @@ async function generatePresignedUrl(env, filename, expires) {
   ].join("\n");
 
   // 4. 创建签名
-  const region = env.MINIO_REGION || "us-east-1";
-  const credentialScope = `${dateStamp}/${region}/s3/aws4_request`;
-
   const stringToSign = [
     "AWS4-HMAC-SHA256",
     timestamp,
@@ -132,16 +153,8 @@ async function generatePresignedUrl(env, filename, expires) {
     region
   )).toLowerCase();
 
+  // 构建最终 URL
   const base = `${protocol}://${env.MINIO_ENDPOINT}${port}${canonicalUri}`;
-
-  const now = Math.floor(Date.now() / 1000);
-  const queryParams = {
-    "X-Amz-Algorithm": "AWS4-HMAC-SHA256",
-    "X-Amz-Credential": `${env.MINIO_ACCESS_KEY}/${credentialScope}`,
-    "X-Amz-Date": timestamp,
-    "X-Amz-Expires": String(expires - now),
-    "X-Amz-SignedHeaders": signedHeaders
-  };
 
   const queryString = Object.entries(queryParams)
     .map(([key, value]) => {
