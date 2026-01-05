@@ -82,29 +82,27 @@ async function generatePresignedUrl(env, filename, expires) {
     return `${year}${month}${day}T${hours}${minutes}${seconds}Z`;
   }
 
-  // 在 generatePresignedUrl 中使用：
-  const timestamp = formatISO8601(new Date(expires * 1000));
+  const timestamp = formatISO8601(new Date());
   const dateStamp = timestamp.substring(0, 8); // YYYYMMDD
 
   // 3. 构建规范请求
   const canonicalUri = `/${env.MINIO_BUCKET}/${encodedFilename}`;
   const canonicalQueryString = "";
 
-  // 按字典序排列的 headers
   const headers = {
     "host": `${env.MINIO_ENDPOINT}${port}`
   };
 
-  // 按 key 排序
   const sortedHeaders = Object.keys(headers)
+    .map(key => key.toLowerCase())
     .sort((a, b) => a.localeCompare(b))
-    .map(key => `${key}.toLowerCase():${headers[key]}`)
+    .map(key => `${key}:${headers[key]}`)
     .join("\n");
 
   const signedHeaders = Object.keys(headers)
+    .map(key => key.toLowerCase())
     .sort()
-    .join(";")
-    .toLowerCase();
+    .join(";");
 
   const canonicalRequest = [
     "PUT",                      // HTTP 方法
@@ -118,7 +116,8 @@ async function generatePresignedUrl(env, filename, expires) {
 
   // 4. 创建签名
   const region = env.MINIO_REGION || "us-east-1";
-  const credentialScope = `${dateStamp}/us-east-1/s3/aws4_request`;
+  const credentialScope = `${dateStamp}/${region}/s3/aws4_request`;
+
   const stringToSign = [
     "AWS4-HMAC-SHA256",
     timestamp,
@@ -126,15 +125,14 @@ async function generatePresignedUrl(env, filename, expires) {
     await sha256(canonicalRequest)
   ].join("\n");
 
-  const signature = await getSignature(
+  const signature = (await getSignature(
     env.MINIO_SECRET_KEY,
     dateStamp,
     stringToSign,
     region
-  );
+  )).toLowerCase();
 
-  // 5. 构建预签名 URL
-  const uploadUrl = new URL(`${protocol}://${env.MINIO_ENDPOINT}${port}${canonicalUri}`);
+  const base = `${protocol}://${env.MINIO_ENDPOINT}${port}${canonicalUri}`;
 
   const now = Math.floor(Date.now() / 1000);
   const queryParams = {
@@ -142,15 +140,19 @@ async function generatePresignedUrl(env, filename, expires) {
     "X-Amz-Credential": `${env.MINIO_ACCESS_KEY}/${credentialScope}`,
     "X-Amz-Date": timestamp,
     "X-Amz-Expires": String(expires - now),
-    "X-Amz-SignedHeaders": signedHeaders,
-    "X-Amz-Signature": signature
+    "X-Amz-SignedHeaders": signedHeaders
   };
 
-  Object.entries(queryParams).forEach(([key, value]) => {
-    uploadUrl.searchParams.append(key, value);
-  });
+  const queryString = Object.entries(queryParams)
+    .map(([key, value]) => {
+      return `${key}=${encodeURIComponent(value)}`;
+    })
+    .join('&');
 
-  return uploadUrl.toString();
+  const signatureParam = `X-Amz-Signature=${signature}`;
+  const fullUrl = `${base}?${queryString}&${signatureParam}`;
+
+  return fullUrl;
 }
 
 // AWS 签名 V4 辅助函数
@@ -169,7 +171,8 @@ async function sha256(message) {
   const hash = await crypto.subtle.digest("SHA-256", data);
   return Array.from(new Uint8Array(hash))
     .map(b => b.toString(16).padStart(2, '0'))
-    .join('');
+    .join('')
+    .toLowerCase();
 }
 
 // HMAC-SHA256
@@ -201,7 +204,8 @@ async function hmac(key, message, hexOutput = false) {
   if (hexOutput) {
     return Array.from(uint8Array)
       .map(b => b.toString(16).padStart(2, '0'))
-      .join('');
+      .join('')
+      .toLowerCase();
   }
   return uint8Array;
 }
