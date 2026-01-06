@@ -1,64 +1,99 @@
 // index.js
+
+// 常量定义
+const DEFAULT_EXPIRY_SECONDS = 60 * 5; // 5分钟有效期
+const DEFAULT_CORS_ORIGIN = "*";
+
+// 辅助函数：构建基础 URL
+function buildBaseUrl(env) {
+  const useSSL = env.MINIO_USE_SSL === "true";
+  const protocol = useSSL ? "https" : "http";
+  const port = env.MINIO_PORT && !["80", "443"].includes(env.MINIO_PORT)
+    ? `:${env.MINIO_PORT}`
+    : "";
+  return { protocol, port, host: `${env.MINIO_ENDPOINT}${port}` };
+}
+
+// 辅助函数：校验环境变量
+function validateEnv(env) {
+  const required = ['MINIO_ENDPOINT', 'MINIO_BUCKET', 'MINIO_ACCESS_KEY', 'MINIO_SECRET_KEY'];
+  const missing = required.filter(key => !env[key]);
+  if (missing.length > 0) {
+    throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+  }
+}
+
 export default {
   async fetch(request, env) {
-    const url = new URL(request.url);
-
-    if (url.pathname !== "/presignedUrl") {
-      return new Response("Not Found", { status: 404 });
-    }
-
-    const filename = url.searchParams.get("filename");
-    if (!filename) {
-      return new Response(JSON.stringify({
-        error: "Missing filename parameter"
-      }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" }
-      });
-    }
-
-    // 添加随机后缀避免文件名冲突，不保留原文件名和路径
-    const dateNow = new Date();
-    // 转换为 GMT+8 时区
-    const offset = 8 * 60; // GMT+8 的分钟偏移量
-    const localTime = new Date(dateNow.getTime() + (dateNow.getTimezoneOffset() + offset) * 60000);
-    const timestamp = localTime.toISOString().replace('T', ' ').substring(0, 19);
-    const uuid = crypto.randomUUID();
-
-    // 提取文件扩展名
-    const lastDotIndex = filename.lastIndexOf('.');
-    const extension = lastDotIndex > 0 ? filename.substring(lastDotIndex) : '';
-
-    // 使用时间戳+UUID作为文件名
-    const modifiedFilename = `${timestamp}_${uuid}${extension}`;
-
-    // 1. 构建公开访问 URL
-    const useSSL = env.MINIO_USE_SSL === "true";
-    const protocol = useSSL ? "https" : "http";
-    const port = env.MINIO_PORT && !["80", "443"].includes(env.MINIO_PORT)
-      ? `:${env.MINIO_PORT}`
-      : "";
-    const publicUrl = `${protocol}://${env.MINIO_ENDPOINT}${port}/${env.MINIO_BUCKET}/${encodeURIComponent(modifiedFilename)}`;
-
-    // 3. 生成预签名上传 URL
-    const expirySeconds = 60 * 5; // 5分钟有效期
-    const now = Math.floor(Date.now() / 1000);
-    const expires = now + expirySeconds;
-
     try {
+      // 校验环境变量
+      validateEnv(env);
+
+      // 只允许 GET 请求
+      if (request.method !== "GET") {
+        return new Response(JSON.stringify({
+          error: "Method not allowed",
+          allowed_methods: ["GET"]
+        }), {
+          status: 405,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
+
+      const url = new URL(request.url);
+
+      if (url.pathname !== "/presignedUrl") {
+        return new Response("Not Found", { status: 404 });
+      }
+
+      const filename = url.searchParams.get("filename");
+      if (!filename) {
+        return new Response(JSON.stringify({
+          error: "Missing filename parameter"
+        }), {
+          status: 400,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
+
+      // 添加随机后缀避免文件名冲突，不保留原文件名和路径
+      const dateNow = new Date();
+      // 转换为 GMT+8 时区
+      const offset = 8 * 60; // GMT+8 的分钟偏移量
+      const localTime = new Date(dateNow.getTime() + (dateNow.getTimezoneOffset() + offset) * 60000);
+      const timestamp = localTime.toISOString().replace(/T/, '_').replace(/:/g, '').substring(0, 15);
+      const uuid = crypto.randomUUID();
+
+      // 提取文件扩展名
+      const lastDotIndex = filename.lastIndexOf('.');
+      const extension = lastDotIndex > 0 ? filename.substring(lastDotIndex) : '';
+
+      // 使用时间戳+UUID作为文件名
+      const modifiedFilename = `${timestamp}_${uuid}${extension}`;
+
+      // 1. 构建公开访问 URL
+      const { protocol, port } = buildBaseUrl(env);
+      const publicUrl = `${protocol}://${env.MINIO_ENDPOINT}${port}/${env.MINIO_BUCKET}/${encodeURIComponent(modifiedFilename)}`;
+
+      // 2. 生成预签名上传 URL
+      const expirySeconds = parseInt(env.EXPIRY_SECONDS) || DEFAULT_EXPIRY_SECONDS;
+      const now = Math.floor(Date.now() / 1000);
+      const expires = now + expirySeconds;
+
       const uploadUrl = await generatePresignedUrl(
         env,
         modifiedFilename,
         expires
       );
 
+      const corsOrigin = env.CORS_ORIGIN || DEFAULT_CORS_ORIGIN;
       return new Response(JSON.stringify({
         upload_url: uploadUrl,
         public_url: publicUrl
       }), {
         headers: {
           "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*"
+          "Access-Control-Allow-Origin": corsOrigin
         }
       });
     } catch (err) {
@@ -74,11 +109,7 @@ export default {
 };
 
 async function generatePresignedUrl(env, filename, expires) {
-  const useSSL = env.MINIO_USE_SSL === "true";
-  const protocol = useSSL ? "https" : "http";
-  const port = env.MINIO_PORT && !["80", "443"].includes(env.MINIO_PORT)
-    ? `:${env.MINIO_PORT}`
-    : "";
+  const { protocol, port, host } = buildBaseUrl(env);
 
   // 1. 规范化文件名（处理路径分隔符）
   const encodedFilename = encodeURIComponent(filename)
@@ -105,7 +136,6 @@ async function generatePresignedUrl(env, filename, expires) {
   const region = env.MINIO_REGION || "us-east-1";
   const credentialScope = `${dateStamp}/${region}/s3/aws4_request`;
 
-  // 计算过期时间（秒）
   const now = Math.floor(Date.now() / 1000);
   const expiresInSeconds = String(expires - now);
 
@@ -129,7 +159,7 @@ async function generatePresignedUrl(env, filename, expires) {
     .join('&');
 
   const headers = {
-    "host": `${env.MINIO_ENDPOINT}${port}`
+    "host": host
   };
 
   const sortedHeaders = Object.keys(headers)
@@ -144,13 +174,13 @@ async function generatePresignedUrl(env, filename, expires) {
     .join(";");
 
   const canonicalRequest = [
-    "PUT",                      // HTTP 方法
-    canonicalUri,               // 规范 URI
-    canonicalQueryString,       // 规范查询参数
-    sortedHeaders,              // 规范 headers
-    "",                         // 空行
-    signedHeaders,              // 签名 headers
-    "UNSIGNED-PAYLOAD"          // 有效负载哈希
+    "PUT",
+    canonicalUri,
+    canonicalQueryString,
+    sortedHeaders,
+    "",
+    signedHeaders,
+    "UNSIGNED-PAYLOAD"
   ].join("\n");
 
   // 4. 创建签名
@@ -169,7 +199,7 @@ async function generatePresignedUrl(env, filename, expires) {
   )).toLowerCase();
 
   // 构建最终 URL
-  const base = `${protocol}://${env.MINIO_ENDPOINT}${port}${canonicalUri}`;
+  const base = `${protocol}://${host}${canonicalUri}`;
 
   const queryString = Object.entries(queryParams)
     .map(([key, value]) => {
