@@ -92,17 +92,243 @@ npm test
 
 ## 部署
 
-部署到 Cloudflare Workers：
+### 首次部署流程
+
+#### 1. 注册 Cloudflare 账号
+
+如果还没有 Cloudflare 账号，请访问 [Cloudflare Workers](https://workers.cloudflare.com/) 注册。
+
+#### 2. 安装并登录 Wrangler CLI
+
+Wrangler 是 Cloudflare Workers 的命令行工具。
+
+**安装 Wrangler：**
+
+```bash
+npm install -g wrangler
+```
+
+**登录 Cloudflare：**
+
+```bash
+wrangler login
+```
+
+执行后会打开浏览器进行授权登录。
+
+#### 3. 创建 Cloudflare Workers 项目（可选）
+
+如果是从零开始创建新项目：
+
+```bash
+mkdir my-worker && cd my-worker
+npm init -y
+npm install wrangler -D
+npx wrangler init
+```
+
+对于本项目，直接使用现有代码即可。
+
+#### 4. 配置 wrangler.jsonc
+
+检查项目根目录的 `wrangler.jsonc` 文件，确保配置正确：
+
+```jsonc
+{
+  "name": "minio-presign-worker",
+  "compatibility_date": "2024-01-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "main": "src/index.js",
+  "vars": {
+    "MINIO_ENDPOINT": "your-minio-server.com",
+    "MINIO_PORT": "9000",
+    "MINIO_BUCKET": "your-bucket-name",
+    "MINIO_USE_SSL": "false",
+    "MINIO_REGION": "us-east-1"
+  }
+}
+```
+
+**注意**：敏感信息（`MINIO_ACCESS_KEY` 和 `MINIO_SECRET_KEY`）不要写在配置文件中，应通过加密密钥设置。
+
+#### 5. 设置加密密钥
+
+**方式一：使用命令行设置（推荐）**
+
+```bash
+# 设置访问密钥
+wrangler secret put MINIO_ACCESS_KEY
+# 输入提示后粘贴你的密钥值
+
+# 设置秘密密钥
+wrangler secret put MINIO_SECRET_KEY
+# 输入提示后粘贴你的密钥值
+```
+
+**方式二：通过 Cloudflare 控制台设置**
+
+1. 访问 [Cloudflare Dashboard](https://dash.cloudflare.com/)
+2. 进入 **Workers & Pages**
+3. 选择你的 Worker（如果还未部署，先执行一次部署）
+4. 点击 **Settings** → **Variables and Secrets**
+5. 在 **Environment Variables** 部分添加：
+   - `MINIO_ENDPOINT`：MinIO 服务器地址
+   - `MINIO_PORT`：端口号
+   - `MINIO_BUCKET`：存储桶名称
+   - `MINIO_USE_SSL`：是否启用 SSL
+   - `MINIO_REGION`：AWS 区域
+6. 在 **Secrets** 部分添加：
+   - `MINIO_ACCESS_KEY`
+   - `MINIO_SECRET_KEY`
+
+#### 6. 部署到 Cloudflare
+
+**部署命令：**
 
 ```bash
 npm run deploy
 ```
 
+或者直接使用 wrangler：
+
+```bash
+wrangler deploy
+```
+
+部署成功后会显示：
+
+```
+✨ Successfully published your Worker to
+  https://minio-presign-worker.your-subdomain.workers.dev
+```
+
+#### 7. 验证部署
+
+测试你的 Worker 是否正常工作：
+
+```bash
+curl "https://minio-presign-worker.your-subdomain.workers.dev/presignedUrl?filename=test.jpg"
+```
+
+如果配置正确，应该返回包含 `upload_url` 和 `public_url` 的 JSON 响应。
+
+### 更新部署
+
+当代码修改后，重新部署：
+
+```bash
+# 更新环境变量（如需要）
+wrangler secret put MINIO_ACCESS_KEY
+
+# 重新部署
+npm run deploy
+```
+
+### 部署到自定义域名（可选）
+
+#### 使用 Cloudflare Workers 域名
+
+默认情况下，Worker 会获得一个 `*.workers.dev` 域名。
+
+#### 绑定自定义域名
+
+1. 在 Cloudflare 控制台中，选择你的 Worker
+2. 进入 **Settings** → **Domains & Routes**
+3. 点击 **Add Custom Domain**
+4. 输入你的域名（如 `upload.example.com`）
+5. 点击 **Add Domain**
+6. 按照提示配置 DNS 记录
+
+配置完成后，可通过自定义域名访问：
+
+```bash
+curl "https://upload.example.com/presignedUrl?filename=test.jpg"
+```
+
+### 多环境部署
+
+如果需要为开发和生产环境配置不同的 Worker：
+
+**开发环境：**
+
+```bash
+# 创建开发环境配置
+cp wrangler.jsonc wrangler.dev.jsonc
+
+# 修改 wrangler.dev.jsonc 中的 name
+# "name": "minio-presign-worker-dev"
+
+# 部署到开发环境
+wrangler deploy --config wrangler.dev.jsonc
+```
+
+**生产环境：**
+
+```bash
+# 使用默认配置部署到生产环境
+wrangler deploy
+```
+
+### 查看和管理已部署的 Worker
+
+**查看 Worker 列表：**
+
+```bash
+wrangler deployments list
+```
+
+**查看 Worker 日志：**
+
+```bash
+wrangler tail
+```
+
+**删除 Worker：**
+
+```bash
+wrangler delete minio-presign-worker
+```
+
+### 常见部署问题
+
+**问题 1：认证失败**
+
+```
+ERROR: Failed to publish your Worker
+Authentication error - please login again
+```
+
+**解决方法：**
+
+```bash
+wrangler logout
+wrangler login
+```
+
+**问题 2：环境变量未生效**
+
+确保敏感信息使用 `wrangler secret put` 设置，而不是在 `wrangler.jsonc` 中配置。
+
+**问题 3：部署后 404 错误**
+
+检查：
+- URL 路径是否为 `/presignedUrl`
+- 是否携带了 `filename` 查询参数
+- MinIO 服务器地址和端口是否正确
+- 存储桶名称是否正确
+
+### 性能优化建议
+
+1. **启用缓存**：对于频繁访问的文件，可考虑在 Cloudflare 层添加缓存逻辑
+2. **压缩响应**：Cloudflare Workers 自动支持 gzip/brotli 压缩
+3. **限制请求频率**：在 Worker 中添加速率限制防止滥用
+4. **监控告警**：使用 Cloudflare Analytics 监控 Worker 性能和错误
+
 ## 使用方法
 
 ### API 接口
 
-**POST** `/presignedUrl?filename=<filename>`
+**GET** `/presignedUrl?filename=<filename>`
 
 #### 查询参数
 
