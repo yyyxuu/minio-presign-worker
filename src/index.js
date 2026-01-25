@@ -61,15 +61,15 @@ export default {
       // 转换为 GMT+8 时区
       const offset = 8 * 60; // GMT+8 的分钟偏移量
       const localTime = new Date(dateNow.getTime() + (dateNow.getTimezoneOffset() + offset) * 60000);
-      const timestamp = localTime.toISOString().replace(/T/, '_').replace(/:/g, '').substring(0, 15);
+      const timestamp = localTime.toISOString().replace(/T/, '_').replace(/:/g, '').substring(0, 17);
       const uuid = crypto.randomUUID();
 
       // 提取文件扩展名
       const lastDotIndex = filename.lastIndexOf('.');
       const extension = lastDotIndex > 0 ? filename.substring(lastDotIndex) : '';
 
-      // 使用时间戳+UUID作为文件名
-      const modifiedFilename = `${timestamp}_${uuid}${extension}`;
+      // 使用时间戳+UUID(前8位)作为文件名
+      const modifiedFilename = `${timestamp}_${uuid.replace(/-/g, '').substring(0, 8)}${extension}`;
 
       // 1. 构建公开访问 URL
       const { protocol, port } = buildBaseUrl(env);
