@@ -39,25 +39,37 @@ npm install
 
 ```bash
 MINIO_ENDPOINT=your-minio-server.com
-MINIO_PORT=9000
+MINIO_USE_SSL=false
 MINIO_BUCKET=your-bucket-name
 MINIO_ACCESS_KEY=your-access-key
 MINIO_SECRET_KEY=your-secret-key
-MINIO_USE_SSL=false
+MINIO_PORT=9000
 MINIO_REGION=us-east-1
+
+# 可选：自定义公开访问域名（适用于 Cloudflare R2 等）
+# 设置后 public_url 将使用此域名，不包含 bucket 名称
+PUBLIC_DOMAIN=https://your-custom-domain.com
 ```
 
 ### 环境变量
 
-| 变量               | 必需 | 默认值    | 说明                                    |
-| ------------------ | ---- | --------- | --------------------------------------- |
-| `MINIO_ENDPOINT`   | 是   | -         | MinIO 服务器地址                        |
-| `MINIO_BUCKET`     | 是   | -         | 目标存储桶名称                          |
-| `MINIO_ACCESS_KEY` | 是   | -         | MinIO 访问密钥                          |
-| `MINIO_SECRET_KEY` | 是   | -         | MinIO 秘密密钥（应配置为加密密钥）      |
-| `MINIO_PORT`       | 否   | 9000      | 服务器端口（80 或 443 时从 URL 中省略） |
-| `MINIO_USE_SSL`    | 否   | false     | 启用 SSL (`true`/`false`)               |
-| `MINIO_REGION`     | 否   | us-east-1 | 用于签名的 AWS 区域                     |
+| 变量               | 必需 | 默认值    | 说明                                                                           |
+| ------------------ | ---- | --------- | ------------------------------------------------------------------------------ |
+| `MINIO_ENDPOINT`   | 是   | -         | MinIO/S3 服务器地址（无需 `http(s)://` 前缀，如 `minio.example.com`）           |
+| `MINIO_USE_SSL`    | 是   | -         | 启用 SSL (`true`/`false`)                                                      |
+| `MINIO_BUCKET`     | 是   | -         | 目标存储桶名称                                                                 |
+| `MINIO_ACCESS_KEY` | 是   | -         | MinIO 访问密钥                                                                 |
+| `MINIO_SECRET_KEY` | 是   | -         | MinIO 秘密密钥（应配置为加密密钥）                                             |
+| `MINIO_PORT`       | 否   | 9000      | 服务器端口（80 或 443 时从 URL 中省略）                                        |
+| `MINIO_REGION`     | 否   | us-east-1 | 用于签名的 AWS 区域                                                            |
+| `PUBLIC_DOMAIN`    | 否   | -         | 自定义公开访问域名（适用于 Cloudflare R2 自定义域名场景），如 `https://r2.example.com` |
+
+**关于 `PUBLIC_DOMAIN`：**
+
+- 当使用 Cloudflare R2 等支持自定义域名的 S3 兼容存储时，可以配置此变量
+- 设置后，`public_url` 将使用此域名，格式为 `https://your-domain.com/filename`
+- 不设置时，`public_url` 使用标准 S3/MinIO 格式（包含 bucket 名称）
+- `upload_url` 始终使用 `MINIO_ENDPOINT` 进行签名验证
 
 ### 生产环境加密密钥
 
@@ -141,10 +153,12 @@ npx wrangler init
   "main": "src/index.js",
   "vars": {
     "MINIO_ENDPOINT": "your-minio-server.com",
-    "MINIO_PORT": "9000",
-    "MINIO_BUCKET": "your-bucket-name",
     "MINIO_USE_SSL": "false",
-    "MINIO_REGION": "us-east-1"
+    "MINIO_BUCKET": "your-bucket-name",
+    "MINIO_PORT": "9000",
+    "MINIO_REGION": "us-east-1",
+    // 可选：自定义公开访问域名
+    // "PUBLIC_DOMAIN": "https://your-custom-domain.com"
   }
 }
 ```
@@ -172,11 +186,12 @@ wrangler secret put MINIO_SECRET_KEY
 3. 选择你的 Worker（如果还未部署，先执行一次部署）
 4. 点击 **Settings** → **Variables and Secrets**
 5. 在 **Environment Variables** 部分添加：
-   - `MINIO_ENDPOINT`：MinIO 服务器地址
-   - `MINIO_PORT`：端口号
+   - `MINIO_ENDPOINT`：MinIO 服务器地址（无需 `http(s)://` 前缀）
+   - `MINIO_USE_SSL`：是否启用 SSL (`true`/`false`)
    - `MINIO_BUCKET`：存储桶名称
-   - `MINIO_USE_SSL`：是否启用 SSL
-   - `MINIO_REGION`：AWS 区域
+   - `MINIO_PORT`：端口号（可选，默认 9000）
+   - `MINIO_REGION`：AWS 区域（可选，默认 us-east-1）
+   - `PUBLIC_DOMAIN`：自定义公开访问域名（可选，如 `https://r2.example.com`）
 6. 在 **Secrets** 部分添加：
    - `MINIO_ACCESS_KEY`
    - `MINIO_SECRET_KEY`
@@ -342,6 +357,13 @@ wrangler login
 	"public_url": "https://minio-server.com/bucket/timestamp-uuid.ext"
 }
 ```
+
+**说明：**
+
+- `upload_url`：用于上传文件的预签名 URL（5 分钟有效期）
+- `public_url`：文件上传成功后可通过此 URL 访问
+  - 如果设置了 `PUBLIC_DOMAIN`：`https://your-domain.com/filename`
+  - 如果未设置 `PUBLIC_DOMAIN`：`https://endpoint/bucket/filename`
 
 #### 使用示例
 

@@ -4,10 +4,13 @@
  */
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
-	"name": "minio-presign-worker",
+	"name": "minio-presign-worker-r2",
 	"main": "src/index.js",
 	"compatibility_date": "2025-11-17",
-	"compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+	"compatibility_flags": [
+		"nodejs_compat",
+		"global_fetch_strictly_public"
+	],
 	"assets": {
 		// The path to the directory containing the `index.html` file to be served at `/`
 		"directory": "./public",

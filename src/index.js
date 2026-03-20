@@ -16,7 +16,7 @@ function buildBaseUrl(env) {
 
 // 辅助函数：校验环境变量
 function validateEnv(env) {
-  const required = ['MINIO_ENDPOINT', 'MINIO_BUCKET', 'MINIO_ACCESS_KEY', 'MINIO_SECRET_KEY'];
+  const required = ['MINIO_ENDPOINT', 'MINIO_USE_SSL', 'MINIO_BUCKET', 'MINIO_ACCESS_KEY', 'MINIO_SECRET_KEY'];
   const missing = required.filter(key => !env[key]);
   if (missing.length > 0) {
     throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
@@ -72,8 +72,17 @@ export default {
       const modifiedFilename = `${timestamp}_${uuid.replace(/-/g, '').substring(0, 8)}${extension}`;
 
       // 1. 构建公开访问 URL
-      const { protocol, port } = buildBaseUrl(env);
-      const publicUrl = `${protocol}://${env.MINIO_ENDPOINT}${port}/${env.MINIO_BUCKET}/${encodeURIComponent(modifiedFilename)}`;
+      // 如果设置了 PUBLIC_DOMAIN，使用自定义域名（适用于 Cloudflare R2 等）
+      // 否则使用 MinIO/R2 API endpoint（包含 bucket 名称）
+      let publicUrl;
+      if (env.PUBLIC_DOMAIN) {
+        // 自定义域名格式：https://domain.com/filename
+        publicUrl = `${env.PUBLIC_DOMAIN}/${encodeURIComponent(modifiedFilename)}`;
+      } else {
+        // 标准 S3/MinIO 格式：https://endpoint/bucket/filename
+        const { protocol, port } = buildBaseUrl(env);
+        publicUrl = `${protocol}://${env.MINIO_ENDPOINT}${port}/${env.MINIO_BUCKET}/${encodeURIComponent(modifiedFilename)}`;
+      }
 
       // 2. 生成预签名上传 URL
       const expirySeconds = parseInt(env.EXPIRY_SECONDS) || DEFAULT_EXPIRY_SECONDS;

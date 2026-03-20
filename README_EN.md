@@ -39,25 +39,37 @@ Create a `.dev.vars` file for local development:
 
 ```bash
 MINIO_ENDPOINT=your-minio-server.com
-MINIO_PORT=9000
+MINIO_USE_SSL=false
 MINIO_BUCKET=your-bucket-name
 MINIO_ACCESS_KEY=your-access-key
 MINIO_SECRET_KEY=your-secret-key
-MINIO_USE_SSL=false
+MINIO_PORT=9000
 MINIO_REGION=us-east-1
+
+# Optional: Custom public domain (for Cloudflare R2, etc.)
+# When set, public_url will use this domain without bucket name
+PUBLIC_DOMAIN=https://your-custom-domain.com
 ```
 
 ### Environment Variables
 
-| Variable           | Required | Default   | Description                                      |
-| ------------------ | -------- | --------- | ------------------------------------------------ |
-| `MINIO_ENDPOINT`   | Yes      | -         | MinIO server address                             |
-| `MINIO_BUCKET`     | Yes      | -         | Target bucket name                               |
-| `MINIO_ACCESS_KEY` | Yes      | -         | MinIO access key                                 |
-| `MINIO_SECRET_KEY` | Yes      | -         | MinIO secret key (should be encrypted as secret) |
-| `MINIO_PORT`       | No       | 9000      | Server port (omitted from URL if 80 or 443)      |
-| `MINIO_USE_SSL`    | No       | false     | Enable SSL (`true`/`false`)                      |
-| `MINIO_REGION`     | No       | us-east-1 | AWS region for signing                           |
+| Variable           | Required | Default   | Description                                                                      |
+| ------------------ | -------- | --------- | -------------------------------------------------------------------------------- |
+| `MINIO_ENDPOINT`   | Yes      | -         | MinIO/S3 server address (no `http(s)://` prefix, e.g., `minio.example.com`)     |
+| `MINIO_USE_SSL`    | Yes      | -         | Enable SSL (`true`/`false`)                                                      |
+| `MINIO_BUCKET`     | Yes      | -         | Target bucket name                                                               |
+| `MINIO_ACCESS_KEY` | Yes      | -         | MinIO access key                                                                 |
+| `MINIO_SECRET_KEY` | Yes      | -         | MinIO secret key (should be set as encrypted secret)                             |
+| `MINIO_PORT`       | No       | 9000      | Server port (omitted from URL if 80 or 443)                                      |
+| `MINIO_REGION`     | No       | us-east-1 | AWS region for signing                                                           |
+| `PUBLIC_DOMAIN`    | No       | -         | Custom public access domain (for Cloudflare R2 custom domain scenarios), e.g., `https://r2.example.com` |
+
+**About `PUBLIC_DOMAIN`:**
+
+- Use this when your S3-compatible storage supports custom domains (like Cloudflare R2)
+- When set, `public_url` will use this domain in format `https://your-domain.com/filename`
+- When not set, `public_url` uses standard S3/MinIO format (includes bucket name)
+- `upload_url` always uses `MINIO_ENDPOINT` for signature verification
 
 ### Production Deployment Secrets
 
@@ -116,6 +128,13 @@ npm run deploy
 	"public_url": "https://minio-server.com/bucket/timestamp-uuid.ext"
 }
 ```
+
+**Notes:**
+
+- `upload_url`: Presigned URL for uploading files (5-minute expiration)
+- `public_url`: URL to access the file after successful upload
+  - If `PUBLIC_DOMAIN` is set: `https://your-domain.com/filename`
+  - If `PUBLIC_DOMAIN` is not set: `https://endpoint/bucket/filename`
 
 #### Example Usage
 
